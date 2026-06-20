@@ -1,0 +1,125 @@
+//---------------------------------------------------------------------------
+
+#include <vcl.h>
+#pragma hdrstop
+
+#include "Unit1.h"
+//---------------------------------------------------------------------------
+#pragma package(smart_init)
+#pragma resource "*.dfm"
+
+
+#define Sx 200
+#define Sy 200
+#define NN 20
+
+
+TForm1 *Form1;
+//---------------------------------------------------------------------------
+__fastcall TForm1::TForm1(TComponent* Owner)
+        : TForm(Owner)
+{
+
+}
+//---------------------------------------------------------------------------
+
+
+
+  class owad{
+      public:
+      int x,y,vx,vy;
+      double masa,q;
+      int skrz,zywy,plec;
+
+      virtual void ruch(void)=0;
+      void smierc(void);
+      komar(void);
+
+      TShape *k;
+      };
+
+
+   class komar: owad
+      {
+      .......
+      .......
+      }
+
+   class szrszen:owad
+      {
+      ........
+      ........
+      }
+
+
+
+komar *kom;
+
+
+komar::komar()
+      {
+      x=random(Sx);
+      y=random(Sy);
+      vx=random(7)-3;
+      vy=random(9)-4;
+      zywy=1;
+
+      k=new TShape(Form1);
+      k->Parent=Form1;
+      k->Left=x;
+      k->Top=y;
+      k->Width=5;
+      k->Height=5;
+      k->Shape=stCircle;
+      }
+
+
+void komar::ruch()
+      {
+      x+=vx;
+      y+=vy;
+      if(x>Sx) vx=-vx;
+      if(x<0) vx=-vx;
+      if(y>Sy) vy=-vy;
+      if(y<0) vy=-vy;
+      k->Left=x;
+      k->Top=y;
+      }
+
+
+void komar::smierc()
+  {
+  if(random(1000)<6) zywy=0;
+  }
+
+
+
+void __fastcall TForm1::Button1Click(TObject *Sender)
+  {       //public:
+  }
+//---------------------------------------------------------------------------
+
+
+
+
+void __fastcall TForm1::Timer1Timer(TObject *Sender)
+{
+int i;
+for(i=0;i<NN;i++)
+ if(kom[i].zywy)
+  {
+  kom[i].ruch();
+  kom[i].smierc();
+  // narodziny
+  // picie_kw...
+  }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TForm1::Button2Click(TObject *Sender)
+{
+kom= new komar[NN];
+Timer1->Enabled = 1; 
+}
+//---------------------------------------------------------------------------
+
