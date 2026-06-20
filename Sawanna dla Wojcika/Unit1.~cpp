@@ -1,0 +1,393 @@
+//---------------------------------------------------------------------------
+#include <vcl.h>
+#pragma hdrstop
+
+#include "Unit1.h"
+#include <cstdlib> 
+#include <ctime>   
+//---------------------------------------------------------------------------
+#pragma package(smart_init)
+#pragma resource "*.dfm"
+TForm1 *Form1;
+//---------------------------------------------------------------------------
+
+// ==================================================
+// 1. KLASA BAZOWA
+// ==================================================
+
+class Organizm {
+protected:
+    int x, y;
+    char znak;
+    int wiek;
+    int maxWiek;
+    char plec; 
+    int czasDoRozmnozenia; 
+public:
+    Organizm(int x, int y, char z, char p, int mw) 
+        : x(x), y(y), znak(z), plec(p), wiek(0), maxWiek(mw), czasDoRozmnozenia(0) {}
+    virtual ~Organizm() {}
+    
+    virtual void akcja(Organizm* plansza[ROZMIAR][ROZMIAR]) = 0;
+    
+    char getZnak() { return znak; }
+    char getPlec() { return plec; }
+    int getX() { return x; }
+    int getY() { return y; }
+    
+    virtual char getWyswietlanyZnak() { return znak; }
+    
+    bool czyDorosly() { return wiek >= 4; } 
+    virtual bool czyUmarw() { return wiek >= maxWiek; }
+    
+    void postarz() { 
+        wiek++; 
+        if (czasDoRozmnozenia > 0) czasDoRozmnozenia--;
+    }
+};
+
+class Lew;
+class Antylopa;
+
+// ==================================================
+// 2. KLASA TRAWA (Super odporna, szybko rosn¹ca)
+// ==================================================
+
+class Trawa : public Organizm {
+public:
+    Trawa(int x, int y) : Organizm(x, y, 'T', 'X', 50) {} // ¯yje a¿ 50 tur
+    
+    void akcja(Organizm* plansza[ROZMIAR][ROZMIAR]) {
+        postarz();
+        if (rand() % 100 < 50) { // 50% szans na rozsianie siê w ka¿dej turze
+            int dx = (rand() % 3) - 1;
+            int dy = (rand() % 3) - 1;
+            int nx = x + dx;
+            int ny = y + dy;
+            if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                if (plansza[nx][ny] == NULL) {
+                    plansza[nx][ny] = new Trawa(nx, ny);
+                }
+            }
+        }
+    }
+};
+
+// ==================================================
+// 3. KLASA BAZOWA ZWIERZ¥T
+// ==================================================
+
+class Zwierze : public Organizm {
+protected:
+    int glod; 
+public:
+    Zwierze(int x, int y, char z, char p, int mw) : Organizm(x, y, z, p, mw), glod(0) {}
+
+    virtual char getWyswietlanyZnak() {
+        if (!czyDorosly()) {
+            if (znak == 'L') return 'l';
+            if (znak == 'A') return 'a';
+        }
+        return znak;
+    }
+
+    void ruchLosowy(Organizm* plansza[ROZMIAR][ROZMIAR]) {
+        int dx = (rand() % 3) - 1;
+        int dy = (rand() % 3) - 1;
+        int nx = x + dx;
+        int ny = y + dy;
+        
+        if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+            if (plansza[nx][ny] == NULL) {
+                plansza[nx][ny] = plansza[x][y];
+                plansza[x][y] = NULL;
+                x = nx;
+                y = ny;
+            }
+        }
+    }
+
+    bool zrobKrokWStrone(Organizm* plansza[ROZMIAR][ROZMIAR], int cx, int cy) {
+        int nx = x; int ny = y;
+        if (cx > x) nx++; else if (cx < x) nx--;
+        if (cy > y) ny++; else if (cy < y) ny--;
+        
+        if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+            if (plansza[nx][ny] == NULL) {
+                plansza[nx][ny] = plansza[x][y];
+                plansza[x][y] = NULL;
+                x = nx; y = ny;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool zjedzJesliObok(Organizm* plansza[ROZMIAR][ROZMIAR], char celZnak);
+    bool idzWStroneCelu(Organizm* plansza[ROZMIAR][ROZMIAR], char celZnak, int zasieg);
+    bool idzDoPartnera(Organizm* plansza[ROZMIAR][ROZMIAR], int zasieg);
+    bool sprobujRozmnozyc(Organizm* plansza[ROZMIAR][ROZMIAR]);
+};
+
+// ==================================================
+// 4. DEFINICJA GATUNKU: LEW
+// ==================================================
+
+class Lew : public Zwierze {
+public:
+    Lew(int x, int y, char p) : Zwierze(x, y, 'L', p, 40) {} 
+    
+    virtual bool czyUmarw() {
+        return (wiek >= maxWiek || glod >= 15); // Wytrzyma a¿ 15 tur bez jedzenia
+    }
+
+    void akcja(Organizm* plansza[ROZMIAR][ROZMIAR]) {
+        postarz();
+        glod++; 
+
+        if (glod > 3) {
+            if (zjedzJesliObok(plansza, 'A')) return;
+            if (idzWStroneCelu(plansza, 'A', 3)) return; 
+        }
+
+        if (czyDorosly() && glod <= 5 && czasDoRozmnozenia == 0) {
+            if (sprobujRozmnozyc(plansza)) return;
+            if (idzDoPartnera(plansza, 3)) return; 
+        }
+
+        if (zjedzJesliObok(plansza, 'A')) return;
+        ruchLosowy(plansza);
+    }
+};
+
+// ==================================================
+// 5. DEFINICJA GATUNKU: ANTYLOPA
+// ==================================================
+
+class Antylopa : public Zwierze {
+public:
+    Antylopa(int x, int y, char p) : Zwierze(x, y, 'A', p, 35) {} 
+    
+    virtual bool czyUmarw() {
+        return (wiek >= maxWiek || glod >= 12); // Wytrzyma 12 tur bez jedzenia
+    }
+
+    void akcja(Organizm* plansza[ROZMIAR][ROZMIAR]) {
+        postarz();
+        glod++;
+
+        if (glod > 4) {
+            if (zjedzJesliObok(plansza, 'T')) return;
+            if (idzWStroneCelu(plansza, 'T', 2)) return;
+        }
+
+        if (czyDorosly() && glod < 6 && czasDoRozmnozenia == 0) {
+            if (sprobujRozmnozyc(plansza)) return;
+            if (idzDoPartnera(plansza, 3)) return;
+        }
+
+        if (zjedzJesliObok(plansza, 'T')) return;
+        ruchLosowy(plansza);
+    }
+};
+
+// ==================================================
+// 6. IMPLEMENTACJA LOGIKI AI DLA ZWIERZ¥T
+// ==================================================
+
+bool Zwierze::zjedzJesliObok(Organizm* plansza[ROZMIAR][ROZMIAR], char celZnak) {
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            int nx = x + dx; int ny = y + dy;
+            if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                if (plansza[nx][ny] != NULL && plansza[nx][ny]->getZnak() == celZnak) {
+                    delete plansza[nx][ny]; 
+                    plansza[nx][ny] = plansza[x][y];
+                    plansza[x][y] = NULL;
+                    x = nx; y = ny;
+                    glod = 0; 
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool Zwierze::idzWStroneCelu(Organizm* plansza[ROZMIAR][ROZMIAR], char celZnak, int zasieg) {
+    for (int r = 1; r <= zasieg; r++) {
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dy = -r; dy <= r; dy++) {
+                int nx = x + dx; int ny = y + dy;
+                if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                    if (plansza[nx][ny] != NULL && plansza[nx][ny]->getZnak() == celZnak) {
+                        return zrobKrokWStrone(plansza, nx, ny);
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool Zwierze::idzDoPartnera(Organizm* plansza[ROZMIAR][ROZMIAR], int zasieg) {
+    for (int r = 1; r <= zasieg; r++) {
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dy = -r; dy <= r; dy++) {
+                int nx = x + dx; int ny = y + dy;
+                if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                    Organizm* sasiad = plansza[nx][ny];
+                    if (sasiad != NULL && sasiad->getZnak() == this->znak && 
+                        sasiad->czyDorosly() && sasiad->getPlec() != this->plec) {
+                        return zrobKrokWStrone(plansza, nx, ny);
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool Zwierze::sprobujRozmnozyc(Organizm* plansza[ROZMIAR][ROZMIAR]) {
+    bool partnerObok = false;
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            int nx = x + dx; int ny = y + dy;
+            if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                Organizm* sasiad = plansza[nx][ny];
+                if (sasiad != NULL && sasiad->getZnak() == this->znak && 
+                    sasiad->czyDorosly() && sasiad->getPlec() != this->plec) {
+                    partnerObok = true;
+                    break;
+                }
+            }
+        }
+        if (partnerObok) break;
+    }
+
+    if (partnerObok) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int nx = x + dx; int ny = y + dy;
+                if (nx >= 0 && nx < ROZMIAR && ny >= 0 && ny < ROZMIAR) {
+                    if (plansza[nx][ny] == NULL) {
+                        char nowaPlec = (rand() % 2 == 0) ? 'M' : 'K';
+                        if (this->znak == 'L') plansza[nx][ny] = new Lew(nx, ny, nowaPlec);
+                        else if (this->znak == 'A') plansza[nx][ny] = new Antylopa(nx, ny, nowaPlec);
+                        
+                        // Znacznie krótszy urlop macierzyñski po aktualizacji
+                        czasDoRozmnozenia = (this->znak == 'L') ? 5 : 3; 
+                        return true; 
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// ==================================================
+// 7. OBS£UGA OKIENKA VCL
+// ==================================================
+
+__fastcall TForm1::TForm1(TComponent* Owner) : TForm(Owner) {}
+
+void __fastcall TForm1::FormCreate(TObject *Sender)
+{
+    srand(time(NULL));
+
+    for(int i = 0; i < ROZMIAR; i++) {
+        for(int j = 0; j < ROZMIAR; j++) {
+            plansza[i][j] = NULL;
+        }
+    }
+
+    // Dodano wiêcej antylop na start (pe³niejsze stado)
+    plansza[1][1] = new Lew(1, 1, 'M');
+    plansza[1][2] = new Lew(1, 2, 'K');
+
+    plansza[4][4] = new Antylopa(4, 4, 'M');
+    plansza[5][5] = new Antylopa(5, 5, 'K');
+    plansza[8][8] = new Antylopa(8, 8, 'M');
+    plansza[8][9] = new Antylopa(8, 9, 'K');
+    plansza[2][7] = new Antylopa(2, 7, 'K');
+    plansza[7][1] = new Antylopa(7, 1, 'M');
+    plansza[3][8] = new Antylopa(3, 8, 'K');
+    
+    // Potê¿ny wysyp trawy na start
+    plansza[0][5] = new Trawa(0, 5);
+    plansza[7][2] = new Trawa(7, 2);
+    plansza[4][8] = new Trawa(4, 8);
+    plansza[9][1] = new Trawa(9, 1);
+    plansza[5][2] = new Trawa(5, 2);
+    plansza[0][0] = new Trawa(0, 0);
+    plansza[9][9] = new Trawa(9, 9);
+    plansza[3][0] = new Trawa(3, 0);
+
+    AktualizujEkran();
+}
+
+void __fastcall TForm1::ButtonTuraClick(TObject *Sender)
+{
+    bool wykonanyRuch[ROZMIAR][ROZMIAR];
+    for(int i = 0; i < ROZMIAR; i++) {
+        for(int j = 0; j < ROZMIAR; j++) {
+            wykonanyRuch[i][j] = false;
+        }
+    }
+
+    for(int j = 0; j < ROZMIAR; j++) {
+        for(int i = 0; i < ROZMIAR; i++) {
+            if(plansza[i][j] != NULL) {
+                if (plansza[i][j]->czyUmarw()) {
+                    delete plansza[i][j];
+                    plansza[i][j] = NULL;
+                }
+                else if (!wykonanyRuch[i][j]) {
+                    Organizm* org = plansza[i][j];
+                    org->akcja(plansza);
+                    
+                    int nx = org->getX();
+                    int ny = org->getY();
+                    wykonanyRuch[nx][ny] = true;
+                }
+            }
+        }
+    }
+
+    AktualizujEkran();
+}
+
+void TForm1::AktualizujEkran()
+{
+    for(int j = 0; j < ROZMIAR; j++) {
+        for(int i = 0; i < ROZMIAR; i++) {
+            if(plansza[i][j] != NULL) {
+                AnsiString info = AnsiString(plansza[i][j]->getWyswietlanyZnak());
+                if (plansza[i][j]->getPlec() != 'X') {
+                    info += AnsiString(plansza[i][j]->getPlec());
+                }
+                StringGrid1->Cells[i][j] = info;
+            } else {
+                StringGrid1->Cells[i][j] = "";
+            }
+        }
+    }
+}
+
+void __fastcall TForm1::FormDestroy(TObject *Sender)
+{
+    for(int i = 0; i < ROZMIAR; i++) {
+        for(int j = 0; j < ROZMIAR; j++) {
+            if(plansza[i][j] != NULL) {
+                delete plansza[i][j];
+            }
+        }
+    }
+}
+
+void __fastcall TForm1::Timer1Timer(TObject *Sender)
+{
+    ButtonTuraClick(this); 
+}
+//---------------------------------------------------------------------------
